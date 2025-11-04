@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
 
 from model import get_model
 from preprocess import create_features
@@ -72,9 +74,56 @@ def main():
 
     # Train model
     print("Training a model...")
-    model = get_model("gbc", random_state = RANDOM_SEED)
-    model.fit(X_train, y_train)
-    print("Training model complete")
+    MODEL_TYPE = "lr" # "gbc, lr"
+    GRID_SEARCH = False
+
+    model = get_model(MODEL_TYPE, random_state = RANDOM_SEED)
+
+    ## GRID SEARCH
+    if GRID_SEARCH: # per gbc è lenta
+        if MODEL_TYPE == "gbc":
+            param_grid = {
+            'n_estimators': [100, 200, 300],
+            'max_depth': [3, 5, 7],
+            'learning_rate': [0.01, 0.1, 0.2],
+            'subsample': [0.8, 1.0] # Frazione di campioni per ogni albero
+            }
+        else: #lr
+            # --- 1. SCALING DEI DATI (Necessario per LR) ---
+            print("Applicazione dello StandardScaler...")
+            # Crea lo scaler
+            scaler = StandardScaler()
+            # Adattalo SOLO su X_train
+            scaler.fit(X_train)
+            # Trasforma sia X_train che X_val
+            X_train = scaler.transform(X_train)
+            X_val = scaler.transform(X_val)
+
+            param_grid = {
+                'C': [0.01, 0.1, 1.0, 10.0],
+                'penalty': ['l1', 'l2'],
+                'solver': ['liblinear', 'saga'] 
+            }
+
+        grid_search = GridSearchCV(
+            estimator=model,
+            param_grid=param_grid,
+            cv=3,
+            scoring='accuracy',
+            n_jobs=-1,
+            verbose=-1
+        )
+
+        grid_search.fit(X_train, y_train)
+
+        print("Training model complete")
+        print(f"Migliori parametri trovati: {grid_search.best_params_}")
+        print(f"Miglior score (accuracy) dalla cross-validation: {grid_search.best_score_:.4f}")
+
+        model = grid_search.best_estimator_
+    else: # TRAIN NORMALE
+        model.fit(X_train, y_train)
+        print("Training model complete")
 
     # Get model predictions (as class labels 0/1)
     y_pred = model.predict(X_val)
