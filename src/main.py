@@ -73,7 +73,7 @@ def main():
 
     # Train model
     print("Training a model...")
-    MODEL_TYPE = "gbc"  # "gbc, lr"
+    MODEL_TYPE = "lr"  # "gbc, lr"
     GRID_SEARCH = True
 
     model = get_model(MODEL_TYPE, random_state = RANDOM_SEED)
