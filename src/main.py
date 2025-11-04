@@ -1,12 +1,12 @@
 import json
-import pprint
+
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
 
-from preprocess import create_features
 from model import get_model
+from preprocess import create_features
 
 TRAIN_SPLIT = 0.9
 RANDOM_SEED = 42
@@ -33,25 +33,18 @@ def prepare_submission(predictions: np.ndarray, test_df: pd.DataFrame) -> None:
     })
 
     # Save the DataFrame to a .csv file
-    submission_df.to_csv('submission.csv', index=False)
+    submission_df.to_csv('submission.csv', index = False)
 
     print("\n'submission.csv' file created successfully!")
-    
 
 def main():
-    # with open("data/test.jsonl") as f:
-    #     for line in f:
-    #         data = json.loads(line)
-    #         pprint.pprint(data)
-    #         break
-    
     train_file_path = "data/train.jsonl"
     test_file_path = "data/test.jsonl"
-    
+
     # Load data
     train_data = load_data(train_file_path)
     test_data = load_data(test_file_path)
-    
+
     # Create features
     print("Processing training data...")
     train_df = create_features(train_data)
@@ -66,35 +59,33 @@ def main():
     features = [col for col in train_df.columns if col not in ['battle_id', 'player_won']]
     X_train = train_df[features]
     y_train = train_df['player_won']
-    
+
     X_train, X_val, y_train, y_val = train_test_split(
         X_train,
         y_train,
-        test_size=1 - TRAIN_SPLIT,
-        random_state=RANDOM_SEED,
-        shuffle=True
+        test_size = 1 - TRAIN_SPLIT,
+        random_state = RANDOM_SEED,
+        shuffle = True
     )
 
     X_test = test_df[features]
-    
+
     # Train model
     print("Training a model...")
-    model = get_model("lr")
+    model = get_model("gbc", random_state = RANDOM_SEED)
     model.fit(X_train, y_train)
     print("Training model complete")
-    
+
     # Get model predictions (as class labels 0/1)
     y_pred = model.predict(X_val)
-    
+
     # Compute accuracy
     acc = accuracy_score(y_val, y_pred)
     print(f"Validation Accuracy: {acc:.4f}")
-    
+
     # Prepare submission
     test_predictions = model.predict(X_test)
     prepare_submission(test_predictions, test_df)
-
-
 
 if __name__ == '__main__':
     main()

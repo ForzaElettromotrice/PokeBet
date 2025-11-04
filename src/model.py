@@ -1,16 +1,16 @@
-from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
 
 def create_logistic_regression(
-    *,
-    penalty: str = "l2",
-    C: float = 1.0,
-    solver: str = "lbfgs",
-    max_iter: int = 1000,
-    multi_class: str = "auto",
-    verbose: int = 0,
-    class_weight: dict | None = None,
-    random_state: int | None  = None,
+        *,
+        penalty: str = "l2",
+        C: float = 1.0,
+        solver: str = "lbfgs",
+        max_iter: int = 1000,
+        multi_class: str = "auto",
+        verbose: int = 0,
+        class_weight: dict | None = None,
+        random_state: int | None = None,
 ) -> LogisticRegression:
     """
     Return a simple sklearn LogisticRegression model configured with common defaults.
@@ -28,29 +28,29 @@ def create_logistic_regression(
     - An untrained sklearn.linear_model.LogisticRegression instance.
     """
     return LogisticRegression(
-        penalty=penalty,
-        C=C,
-        solver=solver,
-        max_iter=max_iter,
-        multi_class=multi_class,
-        class_weight=class_weight,
-        random_state=random_state,
-        verbose=verbose,
+        penalty = penalty,
+        C = C,
+        solver = solver,
+        max_iter = max_iter,
+        multi_class = multi_class,
+        class_weight = class_weight,
+        random_state = random_state,
+        verbose = verbose,
     )
-    
+
 def create_gradient_boosting_classifier(
-    *,
-    n_estimators: int = 100,
-    learning_rate: float = 0.1,
-    max_depth: int = 3,
-    subsample: float = 1.0,
-    max_features: float | int | str | None = None,
-    loss: str = "deviance",
-    validation_fraction: float = 0.1,
-    n_iter_no_change: int | None = None,
-    tol: float = 1e-4,
-    random_state: int | None = None,
-    verbose: int = 0,
+        *,
+        n_estimators: int = 100,
+        learning_rate: float = 0.1,
+        max_depth: int = 3,
+        subsample: float = 1.0,
+        max_features: float | int | str | None = None,
+        loss: str = "log_loss",
+        validation_fraction: float = 0.1,
+        n_iter_no_change: int | None = None,
+        tol: float = 1e-4,
+        random_state: int | None = None,
+        verbose: int = 0,
 ) -> GradientBoostingClassifier:
     """
     Return a sklearn.ensemble.GradientBoostingClassifier configured with sensible defaults.
@@ -62,20 +62,20 @@ def create_gradient_boosting_classifier(
     """
 
     return GradientBoostingClassifier(
-        loss=loss,
-        learning_rate=learning_rate,
-        n_estimators=n_estimators,
-        subsample=subsample,
-        criterion="friedman_mse",
-        min_samples_split=2,
-        min_samples_leaf=1,
-        max_depth=max_depth,
-        random_state=random_state,
-        max_features=max_features,
-        verbose=verbose,
-        validation_fraction=validation_fraction,
-        n_iter_no_change=n_iter_no_change,
-        tol=tol,
+        loss = loss,
+        learning_rate = learning_rate,
+        n_estimators = n_estimators,
+        subsample = subsample,
+        criterion = "friedman_mse",
+        min_samples_split = 2,
+        min_samples_leaf = 1,
+        max_depth = max_depth,
+        random_state = random_state,
+        max_features = max_features,
+        verbose = verbose,
+        validation_fraction = validation_fraction,
+        n_iter_no_change = n_iter_no_change,
+        tol = tol,
     )
 
 def get_model(model: str, **kwargs) -> LogisticRegression | GradientBoostingClassifier:
