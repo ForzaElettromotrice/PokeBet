@@ -179,8 +179,11 @@ def find_moves(data: dict):
 
     p1_attacks_power = [move["base_power"] for p in p1_pokemon_moves.values() for move in p]
     p2_attacks_power = [move["base_power"] for p in p2_pokemon_moves.values() for move in p]
-
-    return np.mean(p1_attacks_power), np.mean(p2_attacks_power), max(p1_attacks_power) if p1_attacks_power != [] else None, max(p2_attacks_power) if p2_attacks_power != [] else None
+    
+    num_priority_moves_p1 = sum(move.get("priority", 0) for p in p1_pokemon_moves.values() for move in p)
+    num_priority_moves_p2 = sum(move.get("priority", 0) for p in p2_pokemon_moves.values() for move in p)
+    
+    return np.mean(p1_attacks_power), np.mean(p2_attacks_power), max(p1_attacks_power) if p1_attacks_power != [] else None, max(p2_attacks_power) if p2_attacks_power != [] else None, num_priority_moves_p1, num_priority_moves_p2
 
 def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, dict, int, int]:
     p1_fainted = 0
@@ -228,11 +231,31 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         for p in battle.get('p1_team_details', []):
             p1_team[p['name']] = p
         
+        # for i, p in enumerate(p1_team.values()):
+        #     features[f'p1_p{i}_base_hp'] = p.get('base_hp', 0)
+        #     features[f'p1_p{i}_base_spe'] = p.get('base_spe', 0)
+        #     features[f'p1_p{i}_base_atk'] = p.get('base_atk', 0)
+        #     features[f'p1_p{i}_base_def'] = p.get('base_def', 0)
+        #     features[f'p1_p{i}_base_spa'] = p.get("base_spa", 0)
+        #     features[f'p1_p{i}_base_spd'] = p.get("base_spd", 0)
+        #     features[f'p1_p{i}_level'] = p.get("level", 0)
+        
         p2_team = {}
         p2_lead = battle.get('p2_lead_details', {})
         p2_team[p2_lead.get('name', '')] = p2_lead
         
+        # features['p2_lead_base_hp'] = p2_lead.get('base_hp', 0)
+        # features['p2_lead_base_spe'] = p2_lead.get('base_spe', 0)
+        # features['p2_lead_base_atk'] = p2_lead.get('base_atk', 0)
+        # features['p2_lead_base_def'] = p2_lead.get('base_def', 0)
+        # features['p2_lead_base_spa'] = p2_lead.get("base_spa", 0)
+        # features['p2_lead_base_spd'] = p2_lead.get("base_spd", 0)
+        # features['p2_lead_level'] = p2_lead.get("level", 0)
+        
         p1_team, p2_team, p1_fnt, p2_fnt = team_after_battle(battle, p1_team, p2_team)
+        
+        features['p1_team_size'] = len(p1_team)
+        features['p2_team_size'] = len(p2_team)
 
         # p1_fnt, p2_fnt = count_fnt(battle)
         features['p1_fnt'] = p1_fnt
@@ -248,11 +271,13 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         features['p1_mean_hp_pct'] = p1_hps
         features['p2_mean_hp_pct'] = p2_hps
 
-        p1_mean_atk, p2_mean_atk, p1_max_atk, p2_max_atk = find_moves(battle)
+        p1_mean_atk, p2_mean_atk, p1_max_atk, p2_max_atk, p1_num_priority, p2_num_priority = find_moves(battle)
         features['p1_mean_atk'] = p1_mean_atk
         features['p2_mean_atk'] = p2_mean_atk
-        # features['p1_max_atk'] = p1_max_atk
-        # features['p2_max_atk'] = p2_max_atk
+        features['p1_max_atk'] = p1_max_atk
+        features['p2_max_atk'] = p2_max_atk
+        features['p1_num_priority_moves'] = p1_num_priority
+        features['p2_num_priority_moves'] = p2_num_priority
         
         p1_adv, p1_res, p2_adv, p2_res = calculate_type_supremacy(battle)
         features['p1_type_adv'] = p1_adv

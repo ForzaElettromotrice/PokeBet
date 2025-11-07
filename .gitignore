@@ -5,3 +5,4 @@ data
 .venv
 submission.csv
 temp.json
+src/__pycache__
