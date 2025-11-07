@@ -72,22 +72,30 @@ def main():
     X_test = test_df[features]
 
     # Train model
-    print("Training a model...")
-    MODEL_TYPE = "lr"  # "gbc, lr"
+    MODEL_TYPE = "lr" # "gbc, lr, xgb"
+    print(f"Training {MODEL_TYPE} model...")
     GRID_SEARCH = True
 
     model = get_model(MODEL_TYPE, random_state = RANDOM_SEED)
 
     ## GRID SEARCH
-    if GRID_SEARCH:  # per gbc è lenta
+    if GRID_SEARCH: # per gbc è lenta
         if MODEL_TYPE == "gbc":
             param_grid = {
-                'n_estimators': [100, 200, 300],
-                'max_depth': [3, 5, 7],
-                'learning_rate': [0.01, 0.1, 0.2],
-                'subsample': [0.8, 1.0]  # Frazione di campioni per ogni albero
+            'n_estimators': [100, 200, 300],
+            'max_depth': [3, 5, 7],
+            'learning_rate': [0.01, 0.1, 0.2],
+            'subsample': [0.8, 1.0] # Frazione di campioni per ogni albero
             }
-        else:  # lr
+        elif MODEL_TYPE == "xgb": 
+            param_grid = {
+                'n_estimators': [150, 200, 250],      # Numero di alberi
+                'max_depth': [3, 5],             # Profondità massima
+                'learning_rate': [0.05, 0.1],    # Tasso di apprendimento
+                'subsample': [0.8, 1.0],         # Frazione di campioni usati per albero
+                'colsample_bytree': [0.8, 1.0]   # Frazione di feature usate per albero
+            }
+        else: #lr
             # --- 1. SCALING DEI DATI (Necessario per LR) ---
             print("Applicazione dello StandardScaler...")
             # Crea lo scaler
@@ -99,28 +107,27 @@ def main():
             X_val = scaler.transform(X_val)
 
             param_grid = {
-                'C': [0.01, 0.1, 1.0, 10.0],
+                'C': [0.01, 0.1, 0.5, 1.0, 1.5, 2.0],
                 'penalty': ['l1', 'l2'],
-                'solver': ['liblinear', 'saga']
+                'solver': ['liblinear', 'saga'] 
             }
-
+        
         grid_search = GridSearchCV(
-            estimator = model,
-            param_grid = param_grid,
-            cv = 3,
-            scoring = 'accuracy',
-            n_jobs = -1,
-            verbose = 0
+            estimator=model,
+            param_grid=param_grid,
+            cv=3,
+            scoring='accuracy',
+            n_jobs=-1,
+            verbose=0
         )
-
+        
         grid_search.fit(X_train, y_train)
-
+        
         print("Training model complete")
         print(f"Migliori parametri trovati: {grid_search.best_params_}")
         print(f"Miglior score (accuracy) dalla cross-validation: {grid_search.best_score_:.4f}")
-
         model = grid_search.best_estimator_
-    else:  # TRAIN NORMALE
+    else:
         model.fit(X_train, y_train)
         print("Training model complete")
 
