@@ -105,6 +105,7 @@ def main():
             # Trasforma sia X_train che X_val
             X_train = scaler.transform(X_train)
             X_val = scaler.transform(X_val)
+            X_test = scaler.transform(X_test)
 
             param_grid = {
                 'C': [0.01, 0.1, 0.5, 1.0, 1.5, 2.0],

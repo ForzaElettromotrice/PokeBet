@@ -260,6 +260,18 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         
         features['p2_type_adv'] = p2_adv
         features['p2_type_res'] = p2_res
+        
+        p1_boosts = 0
+        for p in p1_team.values():
+            for boost in p.get('boosts', {}).values():
+                p1_boosts += boost
+        features['p1_total_boosts'] = p1_boosts
+        p2_boosts = 0
+        for p in p2_team.values():
+            for boost in p.get('boosts', {}).values():
+                p2_boosts += boost
+        features['p2_total_boosts'] = p2_boosts
+        features['p1_p2_diff_boosts'] = p1_boosts - p2_boosts
 
         features['battle_id'] = battle.get('battle_id')
         if 'player_won' in battle:
