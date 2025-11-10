@@ -1,13 +1,13 @@
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
-from xgboost import XGBClassifier
+#from xgboost import XGBClassifier
 
 def create_logistic_regression(
         *,
         penalty: str = "l2",
         C: float = 1.0,
         solver: str = "lbfgs",
-        max_iter: int = 1000,
+        max_iter: int = 7000,
         multi_class: str = "auto",
         verbose: int = 0,
         class_weight: dict | None = None,
@@ -77,40 +77,40 @@ def create_gradient_boosting_classifier(
         n_iter_no_change = n_iter_no_change,
         tol = tol,
     )
-    
-def create_xgb_classifier(
-        *,
-        n_estimators: int = 100,
-        learning_rate: float = 0.1,
-        max_depth: int = 3,
-        subsample: float = 1.0,
-        colsample_bytree: float = 1.0,
-        objective: str = "binary:logistic",
-        eval_metric: str = "logloss",
-        use_label_encoder: bool = False,
-        random_state: int | None = None,
-        verbosity: int = 0,
-) -> "XGBClassifier":
-    """
-    Return an xgboost.XGBClassifier configured with sensible defaults.
+#
+# def create_xgb_classifier(
+#         *,
+#         n_estimators: int = 100,
+#         learning_rate: float = 0.1,
+#         max_depth: int = 3,
+#         subsample: float = 1.0,
+#         colsample_bytree: float = 1.0,
+#         objective: str = "binary:logistic",
+#         eval_metric: str = "logloss",
+#         use_label_encoder: bool = False,
+#         random_state: int | None = None,
+#         verbosity: int = 0,
+# ) -> "XGBClassifier":
+#     """
+#     Return an xgboost.XGBClassifier configured with sensible defaults.
+#
+#     Notes:
+#     - colsample_bytree controls feature subsampling (1.0 = no subsampling).
+#     - subsample controls row subsampling (1.0 = no subsampling).
+#     """
 
-    Notes:
-    - colsample_bytree controls feature subsampling (1.0 = no subsampling).
-    - subsample controls row subsampling (1.0 = no subsampling).
-    """
-
-    return XGBClassifier(
-        objective = objective,
-        eval_metric = eval_metric,
-        learning_rate = learning_rate,
-        n_estimators = n_estimators,
-        subsample = subsample,
-        max_depth = max_depth,
-        colsample_bytree = colsample_bytree,
-        use_label_encoder = use_label_encoder,
-        random_state = random_state,
-        verbosity = verbosity,
-    )
+    # return XGBClassifier(
+    #     objective = objective,
+    #     eval_metric = eval_metric,
+    #     learning_rate = learning_rate,
+    #     n_estimators = n_estimators,
+    #     subsample = subsample,
+    #     max_depth = max_depth,
+    #     colsample_bytree = colsample_bytree,
+    #     use_label_encoder = use_label_encoder,
+    #     random_state = random_state,
+    #     verbosity = verbosity,
+    # )
 
 def get_model(model: str, **kwargs) -> LogisticRegression | GradientBoostingClassifier:
     """
@@ -128,6 +128,6 @@ def get_model(model: str, **kwargs) -> LogisticRegression | GradientBoostingClas
         return create_logistic_regression(**kwargs)
     if key == "gbc":
         return create_gradient_boosting_classifier(**kwargs)
-    if key == "xgb":
-        return create_xgb_classifier(**kwargs)
+    # if key == "xgb":
+    #     return create_xgb_classifier(**kwargs)
     raise ValueError(f"Unknown model '{model}'. Supported: lr, gbc")

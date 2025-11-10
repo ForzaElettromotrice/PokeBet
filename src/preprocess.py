@@ -213,6 +213,101 @@ def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, d
 
     return p1_team, p2_team, p1_fainted, p2_fainted
 
+def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
+
+    type_pokemon1 = {}
+    type_pokemon2 = {}
+
+    for pokemon, moves in p1_moves.items():
+        type_pokemon1[pokemon] = []
+        for move in moves:
+            if move and move.get("type") and move.get("base_power"):
+                type_pokemon1[pokemon].append({
+                    "type": move["type"].capitalize(),
+                    "power": move["base_power"]
+                })
+
+    for pokemon, moves in p2_moves.items():
+        type_pokemon2[pokemon] = []
+        for move in moves:
+            if move and move.get("type") and move.get("base_power"):
+                type_pokemon2[pokemon].append({
+                    "type": move["type"].capitalize(),
+                    "power": move["base_power"]
+                })
+
+    diz_multiplier_my_pokemon = {}
+    diz_multiplier_other_pokemon = {}
+
+    # quanto è efficace il mio pokemon contro i suoi
+    for pokemon1, moves1 in type_pokemon1.items():
+        total_effectiveness = []
+
+        for pokemon2, moves2 in type_pokemon2.items():
+            multiplier = 1.0
+
+            for move in moves1:
+                t_att = move["type"]
+                base_power = move["power"]
+
+                for t_def_move in moves2:
+                    t_def = t_def_move["type"]
+                    super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
+
+                    if t_def in no_eff:
+                        multiplier *= 0.0
+                    elif t_def in super_eff:
+                        multiplier *= 2.0
+                    elif t_def in meno_eff:
+                        multiplier *= 0.5
+                    else:
+                        multiplier *= 1.0
+
+
+                multiplier *= (base_power / 100.0)
+
+            total_effectiveness.append(multiplier)
+
+        diz_multiplier_my_pokemon[pokemon1] = np.mean(total_effectiveness)
+
+    #efficacia dei suoi pokemon contro i miei
+    for pokemon2, moves2 in type_pokemon2.items():
+        total_effectiveness = []
+
+        for pokemon1, moves1 in type_pokemon1.items():
+            multiplier = 1.0
+
+            for move in moves2:
+                t_att = move["type"]
+                base_power = move["power"]
+
+                for t_def_move in moves1:
+                    t_def = t_def_move["type"]
+                    super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
+
+                    if t_def in no_eff:
+                        multiplier *= 0.0
+                    elif t_def in super_eff:
+                        multiplier *= 2.0
+                    elif t_def in meno_eff:
+                        multiplier *= 0.5
+                    else:
+                        multiplier *= 1.0
+
+                multiplier *= (base_power / 100.0)
+
+            total_effectiveness.append(multiplier)
+
+        diz_multiplier_other_pokemon[pokemon2] = np.mean(total_effectiveness)
+
+    p1_team_avg = np.mean(list(diz_multiplier_my_pokemon.values()))
+    p2_team_avg = np.mean(list(diz_multiplier_other_pokemon.values()))
+
+    return p1_team_avg, p2_team_avg
+
+
+
+
 def create_features(data: list[dict]) -> pd.DataFrame:
     feature_list = []
     for battle in tqdm(data, desc = "Extracting features"):
@@ -280,11 +375,11 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         features['p2_num_priority_moves'] = p2_num_priority
         
         p1_adv, p1_res, p2_adv, p2_res = calculate_type_supremacy(battle)
-        features['p1_type_adv'] = p1_adv
-        features['p1_type_res'] = p1_res
-        
-        features['p2_type_adv'] = p2_adv
-        features['p2_type_res'] = p2_res
+        #features['p1_type_adv'] = p1_adv
+        #features['p1_type_res'] = p1_res
+
+        #features['p2_type_adv'] = p2_adv
+        #features['p2_type_res'] = p2_res
         
         p1_boosts = 0
         for p in p1_team.values():
@@ -302,6 +397,12 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         if 'player_won' in battle:
             features['player_won'] = int(battle['player_won'])
 
+        #feature_list.append(features)
+
+        p1_moves, p2_moves = extract_moves(battle)
+        p1_team_avg, p2_team_avg = type_multiplier(p1_moves, p2_moves)
+        features['p1_avg'] = p1_team_avg
+        features['p2_avg'] = p2_team_avg
         feature_list.append(features)
 
     return pd.DataFrame(feature_list).fillna(0)
