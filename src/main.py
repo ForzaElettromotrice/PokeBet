@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler
 
 from model import get_model
-from preprocess import create_features
+from preprocess2 import create_features
 from settings import *
 
 def load_data(path: str):
@@ -113,7 +113,7 @@ def main():
         grid_search = GridSearchCV(
             estimator = model,
             param_grid = param_grid,
-            cv = 3,
+            cv = 5,
             scoring = 'accuracy',
             n_jobs = -1,
             verbose = 0

@@ -1,4 +1,4 @@
-TRAIN_SPLIT = 0.8
+TRAIN_SPLIT = 0.2
 RANDOM_SEED = 42
 
 MODEL_TYPE = "lr"  # "gbc, lr, xgb"
