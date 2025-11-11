@@ -1,0 +1,7 @@
+TRAIN_SPLIT = 0.8
+RANDOM_SEED = 42
+
+MODEL_TYPE = "lr"  # "gbc, lr, xgb"
+GRID_SEARCH = True
+
+CREATE_TYPES_RECORD = False

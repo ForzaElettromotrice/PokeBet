@@ -1,8 +1,10 @@
-from typing import Tuple
+import json
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+
+import settings
 
 TABLE_TYPE = {
     "Normal": ([], ["Rock", "Steel"], ["Ghost"]),
@@ -41,421 +43,191 @@ TABLE_TYPE = {
     "Fairy": (["Fighting", "Dragon", "Dark"],
               ["Fire", "Poison", "Steel"], [])
 }
+POKEMON_TYPES = { }
 
-def count_fnt(data: dict) -> Tuple[int, int]:
-    out1 = 0
-    out2 = 0
-    for turn in data["battle_timeline"]:
-        if turn["p1_pokemon_state"]["status"] == "fnt":
-            out1 += 1
-        if turn["p2_pokemon_state"]["status"] == "fnt":
-            out2 += 1
-    return out1, out2
-def count_status_alter(data: dict) -> Tuple[int, int]:
-    p1_pokemons = { }
-    p2_pokemons = { }
+def load_types_record(data: list[dict]):
+    global POKEMON_TYPES
 
+    if not settings.CREATE_TYPES_RECORD:
+        with open("data/pokemon_types.json") as f:
+            POKEMON_TYPES = json.load(f)
+            return
+
+    for battle in data:
+        for pokemon in battle["p1_team_details"]:
+            if pokemon["name"] not in POKEMON_TYPES:
+                POKEMON_TYPES[pokemon["name"]] = [_type for _type in pokemon["types"] if _type != "notype"]
+
+        if battle["p2_lead_details"]["name"] not in POKEMON_TYPES:
+            POKEMON_TYPES[battle["p2_lead_details"]["name"]] = [_type for _type in battle["p2_lead_details"]["types"] if _type != "notype"]
+
+    with open("data/pokemon_types.json", "w") as f:
+        json.dump(POKEMON_TYPES, f, indent = 8)
+
+    settings.CREATE_TYPES_RECORD = False
+
+def find_alive_pokemon(data: dict, pokemon_details: dict):
+    p2_count = 6
     for turn in data["battle_timeline"]:
         p1_name = turn["p1_pokemon_state"]["name"]
         p2_name = turn["p2_pokemon_state"]["name"]
 
-        p1_pokemons[p1_name] = turn["p1_pokemon_state"]["status"]
-        p2_pokemons[p2_name] = turn["p2_pokemon_state"]["status"]
+        if p2_name not in pokemon_details["p2"]:
+            p2_count -= 1
 
-    p1_statuses = 0
-    p2_statuses = 0
-    for p in p1_pokemons.values():
-        if p not in ["fnt", "nostatus"]:
-            p1_statuses += 1
-    for p in p2_pokemons.values():
-        if p not in ["fnt", "nostatus"]:
-            p2_statuses += 1
-
-    return p1_statuses, p2_statuses
-
-def calculate_mean_hp(p1_team: dict, p2_team: dict):
-    p1_mean = 0
-    p2_mean = 0
-    
-    for p in p1_team.values():
-        p1_mean += p.get('hp_pct', 1) # Se non c'è hp_pct significa che non ha perso hp, quindi 100%
-    p1_mean /= len(p1_team) if len(p1_team) > 0 else 1
-
-    for p in p2_team.values():
-        p2_mean += p.get('hp_pct', 1)
-    p2_mean /= len(p2_team) if len(p2_team) > 0 else 1
-    return p1_mean, p2_mean
-
-def calculate_score(p1: set[str], p2: set[str]) -> Tuple[int, int]:
-    adv = 0
-    res = 0
-    for t1 in p1:
-        t1 = t1.capitalize()
-        for t2 in p2:
-            t2 = t2.capitalize()
-
-            if t2 in TABLE_TYPE[t1][0]:
-                adv += 1
-            elif t2 in TABLE_TYPE[t1][1]:
-                adv -= 1
-            elif t2 in TABLE_TYPE[t1][2]:
-                adv -= 2
-
-            if t1 in TABLE_TYPE[t2][0]:
-                res -= 1
-            elif t1 in TABLE_TYPE[t2][1]:
-                res += 1
-            elif t1 in TABLE_TYPE[t2][2]:
-                res += 2
-    return adv, res
-
-def old_calculate_type_supremacy(data: dict) -> Tuple[int, int]:
-    p1_pokemons = { }
-    p2_pokemons = { }
-
-    for turn in data["battle_timeline"]:
-
-        p1_name = turn["p1_pokemon_state"]["name"]
-        p2_name = turn["p2_pokemon_state"]["name"]
-
-        if p1_name not in p1_pokemons:
-            p1_pokemons[p1_name] = set()
-        if p2_name not in p2_pokemons:
-            p2_pokemons[p2_name] = set()
-
-        if turn["p1_move_details"] is not None:
-            p1_pokemons[p1_name].add(turn["p1_move_details"]["type"])
-        if turn["p2_move_details"] is not None:
-            p2_pokemons[p2_name].add(turn["p2_move_details"]["type"])
+        pokemon_details["p1"][p1_name] = { "attack_type_score": 0, "defense_type_score": 0, "moves": [], "state": turn["p1_pokemon_state"] }
+        pokemon_details["p2"][p2_name] = { "attack_type_score": 0, "defense_type_score": 0, "moves": [], "state": turn["p2_pokemon_state"] }
 
         if turn["p1_pokemon_state"]["status"] == "fnt":
-            del p1_pokemons[p1_name]
+            del pokemon_details["p1"][p1_name]
         if turn["p2_pokemon_state"]["status"] == "fnt":
-            del p2_pokemons[p2_name]
+            del pokemon_details["p2"][p2_name]
 
-    p1_points = [[0, 0] for _ in p1_pokemons]
-    p2_points = [[0, 0] for _ in p2_pokemons]
-    for i, p1 in enumerate(p1_pokemons.values()):
-        for p2 in p2_pokemons.values():
-            adv, res = calculate_score(p1, p2)
-            p1_points[i][0] += adv
-            p1_points[i][1] += res
-            
-    for i, p2 in enumerate(p2_pokemons.values()):
-        for p1 in p1_pokemons.values():
-            adv, res = calculate_score(p2, p1)
-            p2_points[i][0] += adv
-            p2_points[i][1] += res
-    return sum(x[0] for x in p1_points), sum(x[1] for x in p1_points), sum(x[0] for x in p2_points), sum(x[1] for x in p2_points)
-
-def normalize_moves(pokemon_moves: dict[str, list[dict]]) -> None:
-    for pokemon, moves in pokemon_moves.items():
-        for move in moves:
-            move["base_power"] *= move["accuracy"]
-
-def calculate_type_supremacy(p1_defense_types: dict[str, set[str]], p1_attack_types: dict[str, list[str]], p2_types: dict[str, list[str]]) -> Tuple[int, int]:
-    defense_score = 0
-    attack_score = 0
-    for types1 in p1_defense_types.values():
-        for _type1 in types1:
-            _type1 = _type1.capitalize()
-            if _type1 == "Notype":
-                continue
-            for types2 in p2_types.values():
-                for _type2 in types2:
-                    _type2 = _type2.capitalize()
-                    if _type1 in TABLE_TYPE[_type2][0]:
-                        defense_score += -1
-                    if _type2 in TABLE_TYPE[_type1][1]:
-                        defense_score += 1
-                    if _type1 in TABLE_TYPE[_type2][2]:
-                        defense_score += 2
-    for types1 in p1_attack_types.values():
-        for _type1 in types1:
-            _type1 = _type1.capitalize()
-            if _type1 == "Notype":
-                continue
-            for types2 in p2_types.values():
-                for _type2 in types2:
-                    if _type2 in TABLE_TYPE[_type1][0]:
-                        attack_score += 1
-                    if _type2 in TABLE_TYPE[_type1][1]:
-                        attack_score += -1
-                    if _type1 in TABLE_TYPE[_type2][2]:
-                        attack_score += -2         
-    return defense_score, attack_score
-                     
-        
-def extract_types(moves: dict[str, list[dict]]) -> dict[str, set[str]]:
-    pokemon_types = {}
-
-    for pokemon, moves in moves.items():
-        pokemon_types[pokemon] = set()
-        for move in moves:
-            if move and move.get("type") and move.get("category") != "STATUS":
-                pokemon_types[pokemon].add(move["type"].capitalize())
-
-    return pokemon_types
-def extract_moves(data: dict) -> Tuple[dict[str, list[dict]], dict[str, list[dict]]]:
-    p1_pokemon_moves = { }
-    p2_pokemon_moves = { }
-
+    for name, p in pokemon_details["p1"].items():
+        p["types"] = POKEMON_TYPES[name] if name in POKEMON_TYPES else []
+    for name, p in pokemon_details["p2"].items():
+        p["types"] = POKEMON_TYPES[name] if name in POKEMON_TYPES else []
+def find_pokemon_moves(data: dict, pokemon_details: dict):
     for turn in data["battle_timeline"]:
         p1_name = turn["p1_pokemon_state"]["name"]
         p2_name = turn["p2_pokemon_state"]["name"]
 
-        if turn["p1_move_details"] is not None and (p1_name not in p1_pokemon_moves or turn["p1_move_details"] not in p1_pokemon_moves[p1_name]):
-            p1_pokemon_moves.setdefault(p1_name, []).append(turn["p1_move_details"])
-        if turn["p2_move_details"] is not None and (p2_name not in p2_pokemon_moves or turn["p2_move_details"] not in p2_pokemon_moves[p2_name]):
-            p2_pokemon_moves.setdefault(p2_name, []).append(turn["p2_move_details"])
+        p1_move = turn["p1_move_details"]
+        p2_move = turn["p2_move_details"]
 
-        if turn["p1_pokemon_state"]["status"] == "fnt":
-            p1_pokemon_moves.pop(p1_name, None)
-        if turn["p2_pokemon_state"]["status"] == "fnt":
-            p2_pokemon_moves.pop(p2_name, None)
+        if p1_move is not None and p1_name in pokemon_details["p1"] and p1_move["name"] not in pokemon_details["p1"][p1_name]["moves"]:
+            pokemon_details["p1"][p1_name]["moves"].append(p1_move)
+        if p2_move is not None and p2_name in pokemon_details["p2"] and p2_move["name"] not in pokemon_details["p2"][p2_name]["moves"]:
+            pokemon_details["p2"][p2_name]["moves"].append(p2_move)
+def find_defense_type_score(pokemon_details: dict):
+    for p1 in pokemon_details["p1"].values():
+        for p2 in pokemon_details["p2"].values():
+            for m in p2["moves"]:
+                if m["category"] == "STATUS":
+                    continue
+                p1_score = 1
+                for _type in p1["types"]:
+                    if _type in TABLE_TYPE[m["type"].capitalize()][0]:
+                        p1_score *= 1 / 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][1]:
+                        p1_score *= 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][2]:
+                        p1_score *= 0
 
-    return p1_pokemon_moves, p2_pokemon_moves
-def find_moves(data: dict):
-    p1_pokemon_moves, p2_pokemon_moves = extract_moves(data)
-    normalize_moves(p1_pokemon_moves)
-    normalize_moves(p2_pokemon_moves)
-    p1_pokemon_attack_types = extract_types(p1_pokemon_moves)
-    p2_pokemon_attack_types = extract_types(p2_pokemon_moves)
-    p1_pokemon_defense_types = {p.get("name"): set(p.get("types")) for p in data.get("p1_team_details")}
+                p1["defense_type_score"] += p1_score
+            for m in p1["moves"]:
+                if m["category"] == "STATUS":
+                    continue
+                p2_score = 1
+                for _type in p2["types"]:
+                    if _type in TABLE_TYPE[m["type"].capitalize()][0]:
+                        p2_score *= 1 / 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][1]:
+                        p2_score *= 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][2]:
+                        p2_score *= 0
 
-    type_defense_score, type_attack_score = calculate_type_supremacy(p1_pokemon_defense_types, p1_pokemon_attack_types, p2_pokemon_attack_types)
+                p2["defense_type_score"] += p2_score
+def find_attack_type_score(pokemon_details: dict):
+    for p1 in pokemon_details["p1"].values():
+        for p2 in pokemon_details["p2"].values():
+            for m in p1["moves"]:
+                if m["category"] == "STATUS":
+                    continue
+                p1_score = 1
+                for _type in p2["types"]:
+                    if _type in TABLE_TYPE[m["type"].capitalize()][0]:
+                        p1_score *= 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][1]:
+                        p1_score *= 1 / 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][2]:
+                        p1_score *= 0
 
-    p1_attacks_power = [move["base_power"] for p in p1_pokemon_moves.values() for move in p]
-    p2_attacks_power = [move["base_power"] for p in p2_pokemon_moves.values() for move in p]
-    
-    num_priority_moves_p1 = sum(move.get("priority", 0) for p in p1_pokemon_moves.values() for move in p)
-    num_priority_moves_p2 = sum(move.get("priority", 0) for p in p2_pokemon_moves.values() for move in p)
-    
-    
-    
-    return np.mean(p1_attacks_power), np.mean(p2_attacks_power), max(p1_attacks_power) if p1_attacks_power != [] else None, max(p2_attacks_power) if p2_attacks_power != [] else None, num_priority_moves_p1, num_priority_moves_p2, type_attack_score, type_defense_score
+                p1["attack_type_score"] += p1_score
+            for m in p2["moves"]:
+                if m["category"] == "STATUS":
+                    continue
+                p2_score = 1
+                for _type in p1["types"]:
+                    if _type in TABLE_TYPE[m["type"].capitalize()][0]:
+                        p2_score *= 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][1]:
+                        p2_score *= 1 / 2
+                    if _type in TABLE_TYPE[m["type"].capitalize()][2]:
+                        p2_score *= 0
 
-def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, dict, int, int]:
-    p1_fainted = 0
-    p2_fainted = 0
-    for turn in data["battle_timeline"]:
-        p1_name = turn["p1_pokemon_state"]["name"]
-        p2_name = turn["p2_pokemon_state"]["name"]
-        
-        if p2_name not in p2_team:
-            p2_team[p2_name] = turn["p2_pokemon_state"]
-
-        p1_team[p1_name]['hp_pct'] = turn["p1_pokemon_state"]["hp_pct"]
-        p2_team[p2_name]['hp_pct'] = turn["p2_pokemon_state"]["hp_pct"]
-        p1_team[p1_name]['status'] = turn["p1_pokemon_state"]["status"]
-        p2_team[p2_name]['status'] = turn["p2_pokemon_state"]["status"]
-        p1_team[p1_name]['effects'] = turn["p1_pokemon_state"]["effects"]
-        p2_team[p2_name]['effects'] = turn["p2_pokemon_state"]["effects"]
-        p1_team[p1_name]['boosts'] = turn["p1_pokemon_state"]["boosts"]
-        p2_team[p2_name]['boosts'] = turn["p2_pokemon_state"]["boosts"]
-
-
-        if p1_team[p1_name]['status']  == "fnt":
-            del p1_team[p1_name]
-            p1_fainted += 1
-        if p2_team[p2_name]['status']  == "fnt":
-            del p2_team[p2_name]
-            p2_fainted += 1
-
-    return p1_team, p2_team, p1_fainted, p2_fainted
-
-def type_multiplier(p1_moves: dict, p2_moves: dict) -> Tuple[float, float]:
-
-    type_pokemon1 = {}
-    type_pokemon2 = {}
-
-    for pokemon, moves in p1_moves.items():
-        type_pokemon1[pokemon] = []
-        for move in moves:
-            if move and move.get("type") and move.get("base_power"):
-                type_pokemon1[pokemon].append({
-                    "type": move["type"].capitalize(),
-                    "power": move["base_power"]
-                })
-
-    for pokemon, moves in p2_moves.items():
-        type_pokemon2[pokemon] = []
-        for move in moves:
-            if move and move.get("type") and move.get("base_power"):
-                type_pokemon2[pokemon].append({
-                    "type": move["type"].capitalize(),
-                    "power": move["base_power"]
-                })
-
-    diz_multiplier_my_pokemon = {}
-    diz_multiplier_other_pokemon = {}
-
-    # quanto è efficace il mio pokemon contro i suoi
-    for pokemon1, moves1 in type_pokemon1.items():
-        total_effectiveness = []
-
-        for pokemon2, moves2 in type_pokemon2.items():
-            multiplier = 1.0
-
-            for move in moves1:
-                t_att = move["type"]
-                base_power = move["power"]
-
-                for t_def_move in moves2:
-                    t_def = t_def_move["type"]
-                    super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
-
-                    if t_def in no_eff:
-                        multiplier *= 0.0
-                    elif t_def in super_eff:
-                        multiplier *= 2.0
-                    elif t_def in meno_eff:
-                        multiplier *= 0.5
-                    else:
-                        multiplier *= 1.0
-
-
-                multiplier *= (base_power / 100.0)
-
-            total_effectiveness.append(multiplier)
-
-        diz_multiplier_my_pokemon[pokemon1] = np.mean(total_effectiveness)
-
-    #efficacia dei suoi pokemon contro i miei
-    for pokemon2, moves2 in type_pokemon2.items():
-        total_effectiveness = []
-
-        for pokemon1, moves1 in type_pokemon1.items():
-            multiplier = 1.0
-
-            for move in moves2:
-                t_att = move["type"]
-                base_power = move["power"]
-
-                for t_def_move in moves1:
-                    t_def = t_def_move["type"]
-                    super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
-
-                    if t_def in no_eff:
-                        multiplier *= 0.0
-                    elif t_def in super_eff:
-                        multiplier *= 2.0
-                    elif t_def in meno_eff:
-                        multiplier *= 0.5
-                    else:
-                        multiplier *= 1.0
-
-                multiplier *= (base_power / 100.0)
-
-            total_effectiveness.append(multiplier)
-
-        diz_multiplier_other_pokemon[pokemon2] = np.mean(total_effectiveness)
-
-    p1_team_avg = np.mean(list(diz_multiplier_my_pokemon.values()))
-    p2_team_avg = np.mean(list(diz_multiplier_other_pokemon.values()))
-
-    return p1_team_avg, p2_team_avg
-
-
-
+                p2["attack_type_score"] += p2_score
 
 def create_features(data: list[dict]) -> pd.DataFrame:
+    load_types_record(data)
+
     feature_list = []
     for battle in tqdm(data, desc = "Extracting features"):
         features = { }
 
-        # --- Player 1 Team Features ---
-        # p1_team = battle.get('p1_team_details', [])
-        # if p1_team:
-        #     features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
-        #     features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
-        #     features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
-        #     features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
-        #     features["p1_mean_spa"] = np.mean([p.get("base_spa", 0) for p in p1_team])
-        #     features["p1_mean_spd"] = np.mean([p.get("base_spd", 0) for p in p1_team])
-        p1_team = {}
-        for p in battle.get('p1_team_details', []):
-            p1_team[p['name']] = p
-        
-        # for i, p in enumerate(p1_team.values()):
-        #     features[f'p1_p{i}_base_hp'] = p.get('base_hp', 0)
-        #     features[f'p1_p{i}_base_spe'] = p.get('base_spe', 0)
-        #     features[f'p1_p{i}_base_atk'] = p.get('base_atk', 0)
-        #     features[f'p1_p{i}_base_def'] = p.get('base_def', 0)
-        #     features[f'p1_p{i}_base_spa'] = p.get("base_spa", 0)
-        #     features[f'p1_p{i}_base_spd'] = p.get("base_spd", 0)
-        #     features[f'p1_p{i}_level'] = p.get("level", 0)
-        
-        p2_team = {}
-        p2_lead = battle.get('p2_lead_details', {})
-        p2_team[p2_lead.get('name', '')] = p2_lead
-        
-        # features['p2_lead_base_hp'] = p2_lead.get('base_hp', 0)
-        # features['p2_lead_base_spe'] = p2_lead.get('base_spe', 0)
-        # features['p2_lead_base_atk'] = p2_lead.get('base_atk', 0)
-        # features['p2_lead_base_def'] = p2_lead.get('base_def', 0)
-        # features['p2_lead_base_spa'] = p2_lead.get("base_spa", 0)
-        # features['p2_lead_base_spd'] = p2_lead.get("base_spd", 0)
-        # features['p2_lead_level'] = p2_lead.get("level", 0)
-        
-        p1_team, p2_team, p1_fnt, p2_fnt = team_after_battle(battle, p1_team, p2_team)
-        
-        features['p1_team_size'] = len(p1_team)
-        features['p2_team_size'] = len(p2_team)
+        # parsing data
 
-        # p1_fnt, p2_fnt = count_fnt(battle)
-        features['p1_fnt'] = p1_fnt
-        features['p2_fnt'] = p2_fnt
-        features["p1_p2_diff_fnt"] = p1_fnt - p2_fnt
+        pokemon_details = { "p1": { }, "p2": { } }
+        find_alive_pokemon(battle, pokemon_details)
+        find_pokemon_moves(battle, pokemon_details)
+        find_defense_type_score(pokemon_details)
+        find_attack_type_score(pokemon_details)
 
-        p1_status_alter, p2_status_alter = count_status_alter(battle)
-        features["p1_status_alter"] = p1_status_alter
-        features["p2_status_alter"] = p2_status_alter
-        features["p1_p2_diff_status_alter"] = p1_status_alter - p2_status_alter
+        # creating features
 
-        p1_hps, p2_hps = calculate_mean_hp(p1_team, p2_team)
-        features['p1_mean_hp_pct'] = p1_hps
-        features['p2_mean_hp_pct'] = p2_hps
+        # number of Pokémon alive
+        features["p1_alive"] = len(pokemon_details["p1"])
+        features["p2_alive"] = len(pokemon_details["p2"])
 
-        p1_mean_atk, p2_mean_atk, p1_max_atk, p2_max_atk, p1_num_priority, p2_num_priority, type_defense_score, type_attack_score = find_moves(battle)
-        features['p1_mean_atk'] = p1_mean_atk
-        features['p2_mean_atk'] = p2_mean_atk
-        # features['p1_max_atk'] = p1_max_atk
-        # features['p2_max_atk'] = p2_max_atk
-        # features['p1_num_priority_moves'] = p1_num_priority
-        # features['p2_num_priority_moves'] = p2_num_priority
-        features["type_attack_score"] = type_attack_score
-        features["type_defense_score"] = type_defense_score
-        
-        p1_adv, p1_res, p2_adv, p2_res = old_calculate_type_supremacy(battle)
-        #features['p1_type_adv'] = p1_adv
-        #features['p1_type_res'] = p1_res
+        # number of Pokémon fainted
+        features["p1_fainted"] = 6 - features["p1_alive"]
+        features["p2_fainted"] = 6 - features["p2_alive"]
 
-        #features['p2_type_adv'] = p2_adv
-        #features['p2_type_res'] = p2_res
-        
-        p1_boosts = 0
-        for p in p1_team.values():
-            for boost in p.get('boosts', {}).values():
-                p1_boosts += boost
-        features['p1_total_boosts'] = p1_boosts
-        p2_boosts = 0
-        for p in p2_team.values():
-            for boost in p.get('boosts', {}).values():
-                p2_boosts += boost
-        features['p2_total_boosts'] = p2_boosts
-        features['p1_p2_diff_boosts'] = p1_boosts - p2_boosts
+        # difference between the number of alive Pokémon
+        features["p1_p2_alive_diff"] = features["p1_alive"] - features["p2_alive"]
+
+        # number of Pokémon that we don't know anything about
+        features["p2_unknow"] = 6 - len(pokemon_details["p2"])
+
+        # number of Pokémon with a bad status
+        features["p1_bad_status"] = len([1 for p in pokemon_details["p1"].values() if p["state"]["status"] not in ["fnt", "nostatus"]])
+        features["p2_bad_status"] = len([1 for p in pokemon_details["p2"].values() if p["state"]["status"] not in ["fnt", "nostatus"]])
+
+        # difference between the number of bad status Pokémon
+        features["p1_p2_bad_status_diff"] = features["p1_bad_status"] - features["p2_bad_status"]
+
+        # mean hp of the team
+        features["p1_mean_hp"] = np.mean([p["state"]["hp_pct"] for p in pokemon_details["p1"].values()])
+        features["p2_mean_hp"] = np.mean([p["state"]["hp_pct"] for p in pokemon_details["p1"].values()])
+
+        # difference between the mean hp of the team
+        features["p1_p2_mean_hp_diff"] = features["p1_mean_hp"] - features["p2_mean_hp"]
+
+        # meam attack of the team (based on moves)
+        features["p1_mean_atk"] = np.mean([m["base_power"] for p in pokemon_details["p1"].values() for m in p["moves"] if m["category"] != "STATUS"])
+        features["p2_mean_atk"] = np.mean([m["base_power"] for p in pokemon_details["p2"].values() for m in p["moves"] if m["category"] != "STATUS"])
+
+        # difference between the mean attack
+        features["p1_p2_mean_atk_diff"] = features["p1_mean_atk"] - features["p2_mean_atk"]
+
+        # mean defense type score of the team
+        features["p1_mean_defense_type_score"] = np.mean([p["defense_type_score"] for p in pokemon_details["p1"].values()])
+        features["p2_mean_defense_type_score"] = np.mean([p["defense_type_score"] for p in pokemon_details["p2"].values()])
+
+        # difference between the mean defense type score
+        features["p1_p2_mean_defense_type_score_diff"] = features["p1_mean_defense_type_score"] - features["p2_mean_defense_type_score"]
+
+        # mean attack type score of the team
+        features["p1_mean_atk_type_score"] = np.mean([p["attack_type_score"] for p in pokemon_details["p1"].values()])
+        features["p2_mean_atk_type_score"] = np.mean([p["attack_type_score"] for p in pokemon_details["p2"].values()])
+
+        # difference between the mean attack type score
+        features["p1_p2_mean_atk_type_score_diff"] = features["p1_mean_atk_type_score"] - features["p2_mean_atk_type_score"]
 
         features['battle_id'] = battle.get('battle_id')
         if 'player_won' in battle:
             features['player_won'] = int(battle['player_won'])
 
-        #feature_list.append(features)
-
-        # p1_moves, p2_moves = extract_moves(battle)
-        # p1_team_avg, p2_team_avg = type_multiplier(p1_moves, p2_moves)
-        # features['p1_avg'] = p1_team_avg
-        # features['p2_avg'] = p2_team_avg
         feature_list.append(features)
 
     return pd.DataFrame(feature_list).fillna(0)
