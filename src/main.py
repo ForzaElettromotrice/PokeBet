@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from model import get_model
 from preprocess import create_features
 
-TRAIN_SPLIT = 0.9
+TRAIN_SPLIT = 0.8
 RANDOM_SEED = 42
 
 def load_data(path: str):

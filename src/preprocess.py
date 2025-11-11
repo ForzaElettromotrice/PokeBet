@@ -109,7 +109,7 @@ def calculate_score(p1: set[str], p2: set[str]) -> Tuple[int, int]:
                 res += 2
     return adv, res
 
-def calculate_type_supremacy(data: dict) -> Tuple[int, int]:
+def old_calculate_type_supremacy(data: dict) -> Tuple[int, int]:
     p1_pokemons = { }
     p2_pokemons = { }
 
@@ -152,7 +152,50 @@ def normalize_moves(pokemon_moves: dict[str, list[dict]]) -> None:
     for pokemon, moves in pokemon_moves.items():
         for move in moves:
             move["base_power"] *= move["accuracy"]
-            
+
+def calculate_type_supremacy(p1_defense_types: dict[str, set[str]], p1_attack_types: dict[str, list[str]], p2_types: dict[str, list[str]]) -> Tuple[int, int]:
+    defense_score = 0
+    attack_score = 0
+    for types1 in p1_defense_types.values():
+        for _type1 in types1:
+            _type1 = _type1.capitalize()
+            if _type1 == "Notype":
+                continue
+            for types2 in p2_types.values():
+                for _type2 in types2:
+                    _type2 = _type2.capitalize()
+                    if _type1 in TABLE_TYPE[_type2][0]:
+                        defense_score += -1
+                    if _type2 in TABLE_TYPE[_type1][1]:
+                        defense_score += 1
+                    if _type1 in TABLE_TYPE[_type2][2]:
+                        defense_score += 2
+    for types1 in p1_attack_types.values():
+        for _type1 in types1:
+            _type1 = _type1.capitalize()
+            if _type1 == "Notype":
+                continue
+            for types2 in p2_types.values():
+                for _type2 in types2:
+                    if _type2 in TABLE_TYPE[_type1][0]:
+                        attack_score += 1
+                    if _type2 in TABLE_TYPE[_type1][1]:
+                        attack_score += -1
+                    if _type1 in TABLE_TYPE[_type2][2]:
+                        attack_score += -2         
+    return defense_score, attack_score
+                     
+        
+def extract_types(moves: dict[str, list[dict]]) -> dict[str, set[str]]:
+    pokemon_types = {}
+
+    for pokemon, moves in moves.items():
+        pokemon_types[pokemon] = set()
+        for move in moves:
+            if move and move.get("type") and move.get("category") != "STATUS":
+                pokemon_types[pokemon].add(move["type"].capitalize())
+
+    return pokemon_types
 def extract_moves(data: dict) -> Tuple[dict[str, list[dict]], dict[str, list[dict]]]:
     p1_pokemon_moves = { }
     p2_pokemon_moves = { }
@@ -176,6 +219,11 @@ def find_moves(data: dict):
     p1_pokemon_moves, p2_pokemon_moves = extract_moves(data)
     normalize_moves(p1_pokemon_moves)
     normalize_moves(p2_pokemon_moves)
+    p1_pokemon_attack_types = extract_types(p1_pokemon_moves)
+    p2_pokemon_attack_types = extract_types(p2_pokemon_moves)
+    p1_pokemon_defense_types = {p.get("name"): set(p.get("types")) for p in data.get("p1_team_details")}
+
+    type_defense_score, type_attack_score = calculate_type_supremacy(p1_pokemon_defense_types, p1_pokemon_attack_types, p2_pokemon_attack_types)
 
     p1_attacks_power = [move["base_power"] for p in p1_pokemon_moves.values() for move in p]
     p2_attacks_power = [move["base_power"] for p in p2_pokemon_moves.values() for move in p]
@@ -183,7 +231,9 @@ def find_moves(data: dict):
     num_priority_moves_p1 = sum(move.get("priority", 0) for p in p1_pokemon_moves.values() for move in p)
     num_priority_moves_p2 = sum(move.get("priority", 0) for p in p2_pokemon_moves.values() for move in p)
     
-    return np.mean(p1_attacks_power), np.mean(p2_attacks_power), max(p1_attacks_power) if p1_attacks_power != [] else None, max(p2_attacks_power) if p2_attacks_power != [] else None, num_priority_moves_p1, num_priority_moves_p2
+    
+    
+    return np.mean(p1_attacks_power), np.mean(p2_attacks_power), max(p1_attacks_power) if p1_attacks_power != [] else None, max(p2_attacks_power) if p2_attacks_power != [] else None, num_priority_moves_p1, num_priority_moves_p2, type_attack_score, type_defense_score
 
 def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, dict, int, int]:
     p1_fainted = 0
@@ -204,6 +254,7 @@ def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, d
         p1_team[p1_name]['boosts'] = turn["p1_pokemon_state"]["boosts"]
         p2_team[p2_name]['boosts'] = turn["p2_pokemon_state"]["boosts"]
 
+
         if p1_team[p1_name]['status']  == "fnt":
             del p1_team[p1_name]
             p1_fainted += 1
@@ -213,7 +264,7 @@ def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, d
 
     return p1_team, p2_team, p1_fainted, p2_fainted
 
-def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
+def type_multiplier(p1_moves: dict, p2_moves: dict) -> Tuple[float, float]:
 
     type_pokemon1 = {}
     type_pokemon2 = {}
@@ -366,15 +417,17 @@ def create_features(data: list[dict]) -> pd.DataFrame:
         features['p1_mean_hp_pct'] = p1_hps
         features['p2_mean_hp_pct'] = p2_hps
 
-        p1_mean_atk, p2_mean_atk, p1_max_atk, p2_max_atk, p1_num_priority, p2_num_priority = find_moves(battle)
+        p1_mean_atk, p2_mean_atk, p1_max_atk, p2_max_atk, p1_num_priority, p2_num_priority, type_defense_score, type_attack_score = find_moves(battle)
         features['p1_mean_atk'] = p1_mean_atk
         features['p2_mean_atk'] = p2_mean_atk
-        features['p1_max_atk'] = p1_max_atk
-        features['p2_max_atk'] = p2_max_atk
-        features['p1_num_priority_moves'] = p1_num_priority
-        features['p2_num_priority_moves'] = p2_num_priority
+        # features['p1_max_atk'] = p1_max_atk
+        # features['p2_max_atk'] = p2_max_atk
+        # features['p1_num_priority_moves'] = p1_num_priority
+        # features['p2_num_priority_moves'] = p2_num_priority
+        features["type_attack_score"] = type_attack_score
+        features["type_defense_score"] = type_defense_score
         
-        p1_adv, p1_res, p2_adv, p2_res = calculate_type_supremacy(battle)
+        p1_adv, p1_res, p2_adv, p2_res = old_calculate_type_supremacy(battle)
         #features['p1_type_adv'] = p1_adv
         #features['p1_type_res'] = p1_res
 
@@ -399,10 +452,10 @@ def create_features(data: list[dict]) -> pd.DataFrame:
 
         #feature_list.append(features)
 
-        p1_moves, p2_moves = extract_moves(battle)
-        p1_team_avg, p2_team_avg = type_multiplier(p1_moves, p2_moves)
-        features['p1_avg'] = p1_team_avg
-        features['p2_avg'] = p2_team_avg
+        # p1_moves, p2_moves = extract_moves(battle)
+        # p1_team_avg, p2_team_avg = type_multiplier(p1_moves, p2_moves)
+        # features['p1_avg'] = p1_team_avg
+        # features['p2_avg'] = p2_team_avg
         feature_list.append(features)
 
     return pd.DataFrame(feature_list).fillna(0)
