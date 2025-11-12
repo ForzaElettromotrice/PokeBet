@@ -42,6 +42,83 @@ TABLE_TYPE = {
               ["Fire", "Poison", "Steel"], [])
 }
 
+P_DEF_TYPE= {
+        "starmie": [
+                "psychic",
+                "water"
+        ],
+        "exeggutor": [
+                "grass",
+                "psychic"
+        ],
+        "chansey": [
+                "normal"
+        ],
+        "snorlax": [
+                "normal"
+        ],
+        "tauros": [
+                "normal"
+        ],
+        "alakazam": [
+                "psychic"
+        ],
+        "jynx": [
+                "ice",
+                "psychic"
+        ],
+        "slowbro": [
+                "psychic",
+                "water"
+        ],
+        "gengar": [
+                "ghost",
+                "poison"
+        ],
+        "rhydon": [
+                "ground",
+                "rock"
+        ],
+        "zapdos": [
+                "electric",
+                "flying"
+        ],
+        "cloyster": [
+                "ice",
+                "water"
+        ],
+        "golem": [
+                "ground",
+                "rock"
+        ],
+        "jolteon": [
+                "electric"
+        ],
+        "articuno": [
+                "flying",
+                "ice"
+        ],
+        "persian": [
+                "normal"
+        ],
+        "lapras": [
+                "ice",
+                "water"
+        ],
+        "dragonite": [
+                "dragon",
+                "flying"
+        ],
+        "victreebel": [
+                "grass",
+                "poison"
+        ],
+        "charizard": [
+                "fire",
+                "flying"
+        ]
+}
+
 def count_fnt(data: dict) -> Tuple[int, int]:
     out1 = 0
     out2 = 0
@@ -224,7 +301,7 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
             if move and move.get("type") and move.get("base_power") and not move.get("category") == "STATUS":
                 type_pokemon1[pokemon].append({
                     "type": move["type"].capitalize(),
-                    "power": move["base_power"]
+                    "power": move["base_power"] * move["accuracy"]
                 })
 
     for pokemon, moves in p2_moves.items():
@@ -233,7 +310,7 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
             if move and move.get("type") and move.get("base_power") and not move.get("category") == "STATUS":
                 type_pokemon2[pokemon].append({
                     "type": move["type"].capitalize(),
-                    "power": move["base_power"]
+                    "power": move["base_power"] * move["accuracy"]
                 })
 
     diz_multiplier_my_pokemon = {}
@@ -249,10 +326,10 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
             for move in moves1:
                 t_att = move["type"]
                 base_power = move["power"]
+                super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
 
-                for t_def_move in moves2:
-                    t_def = t_def_move["type"]
-                    super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
+                for t_def in P_DEF_TYPE.get(pokemon2.lower(), []):
+                    # t_def = t_def_move["type"]
 
                     if t_def in no_eff:
                         multiplier *= 0.0
@@ -260,9 +337,6 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
                         multiplier *= 2.0
                     elif t_def in meno_eff:
                         multiplier *= 0.5
-                    else:
-                        multiplier *= 1.0
-
 
                 multiplier *= (base_power / 100.0)
 
@@ -280,10 +354,10 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
             for move in moves2:
                 t_att = move["type"]
                 base_power = move["power"]
+                super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
 
-                for t_def_move in moves1:
-                    t_def = t_def_move["type"]
-                    super_eff, meno_eff, no_eff = TABLE_TYPE[t_att]
+                for t_def in P_DEF_TYPE.get(pokemon1.lower(), []):
+                    # t_def = t_def_move["type"]
 
                     if t_def in no_eff:
                         multiplier *= 0.0
@@ -291,8 +365,6 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
                         multiplier *= 2.0
                     elif t_def in meno_eff:
                         multiplier *= 0.5
-                    else:
-                        multiplier *= 1.0
 
                 multiplier *= (base_power / 100.0)
 
@@ -300,8 +372,8 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
 
         diz_multiplier_other_pokemon[pokemon2] = np.mean(total_effectiveness)
 
-    p1_team_avg = np.mean(list(diz_multiplier_my_pokemon.values()))
-    p2_team_avg = np.mean(list(diz_multiplier_other_pokemon.values()))
+    p1_team_avg = np.sum(list(diz_multiplier_my_pokemon.values()))
+    p2_team_avg = np.sum(list(diz_multiplier_other_pokemon.values()))
 
     return p1_team_avg, p2_team_avg
 
