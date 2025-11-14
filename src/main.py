@@ -1,43 +1,59 @@
-import json
-
-import numpy as np
-import pandas as pd
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
+import pandas as pd
 
 from model import get_model
-from preprocess2 import create_features
+from preprocess import create_features
+from utils import load_data, prepare_submission
 from settings import *
 
-TRAIN_FILE_PATH = "data/train.jsonl"
-TEST_FILE_PATH = "data/test.jsonl"
+def train(X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series, X_test: pd.DataFrame):
+    print(f"Training {MODEL_TYPE} model...")
 
-def load_data(path: str):
-    data = []
-    # Read the file line by line
-    print(f"Loading data from '{path}'...")
-    try:
-        with open(path, 'r') as f:
-            for line in f:
-                data.append(json.loads(line))
-        print(f"Successfully loaded {len(data)} battles.")
-    except FileNotFoundError:
-        print(f"ERROR: Could not find the file at '{data}'.")
-        print("Please make sure you have added the competition data to this notebook.")
-    return data
+    model = get_model(MODEL_TYPE, random_state = RANDOM_SEED)
 
-def prepare_submission(predictions: np.ndarray, test_df: pd.DataFrame) -> None:
-    # Create the submission DataFrame
-    submission_df = pd.DataFrame({
-        'battle_id': test_df['battle_id'],
-        'player_won': predictions
-    })
+    if GRID_SEARCH:
+        if MODEL_TYPE == "gbc":
+            param_grid = {
+                'n_estimators': [100, 200, 300],
+                'max_depth': [3, 5, 7],
+                'learning_rate': [0.01, 0.1, 0.2],
+                'subsample': [0.8, 1.0]
+            }
+        else:  # lr
+            param_grid = {
+                'C': [0.01, 0.1, 0.5, 1.0, 1.5, 2.0],
+                'penalty': ['l1', 'l2'],
+                'solver': ['liblinear', 'saga']
+            }
 
-    # Save the DataFrame to a .csv file
-    submission_df.to_csv('submission.csv', index = False)
+        # Cross validation splitter
+        cv_splitter = StratifiedKFold(n_splits=10, shuffle=True, random_state=RANDOM_SEED)
 
-    print("\n'submission.csv' file created successfully!")
+        grid_search = GridSearchCV(
+            estimator = model,
+            param_grid = param_grid,
+            cv = cv_splitter,
+            scoring = 'accuracy',
+            n_jobs = -1,
+            verbose = 0
+        )
+
+        grid_search.fit(X_train, y_train)
+
+        print("Training model complete")
+        print(f"Best parameters found: {grid_search.best_params_}")
+        model = grid_search.best_estimator_
+        
+        best_idx = grid_search.best_index_
+        mean_best = grid_search.cv_results_['mean_test_score'][best_idx]
+        std_best  = grid_search.cv_results_['std_test_score'][best_idx]
+        print(f"Best params mean CV: {mean_best:.4f} ± {std_best:.4f}")
+    else:
+        model.fit(X_train, y_train)
+        print("Training model complete")
+    return model
 
 def main(train_file_path: str, test_file_path: str) -> None:
     # Load data
@@ -49,10 +65,6 @@ def main(train_file_path: str, test_file_path: str) -> None:
     train_df = create_features(train_data)
     print("Processing test data...")
     test_df = create_features(test_data)
-
-    # Solo per notebook
-    # print("\nTraining features preview:")
-    # display(train_df.head())
 
     # Split into train and validation sets
     features = [col for col in train_df.columns if col not in ['battle_id', 'player_won']]
@@ -68,73 +80,20 @@ def main(train_file_path: str, test_file_path: str) -> None:
     )
 
     X_test = test_df[features]
+    
+    if MODEL_TYPE == "lr":
+        # Scaling of the features for Logistic Regression
+        print("Applying StandardScaler...")
+
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        
+        X_train = scaler.transform(X_train)
+        X_val = scaler.transform(X_val)
+        X_test = scaler.transform(X_test)
 
     # Train model
-
-    print(f"Training {MODEL_TYPE} model...")
-
-    model = get_model(MODEL_TYPE, random_state = RANDOM_SEED)
-
-    ## GRID SEARCH
-    if GRID_SEARCH:  # per gbc è lenta
-        if MODEL_TYPE == "gbc":
-            param_grid = {
-                'n_estimators': [100, 200, 300],
-                'max_depth': [3, 5, 7],
-                'learning_rate': [0.01, 0.1, 0.2],
-                'subsample': [0.8, 1.0]  # Frazione di campioni per ogni albero
-            }
-        elif MODEL_TYPE == "xgb":
-            param_grid = {
-                'n_estimators': [150, 200, 250],  # Numero di alberi
-                'max_depth': [3, 5],  # Profondità massima
-                'learning_rate': [0.05, 0.1],  # Tasso di apprendimento
-                'subsample': [0.8, 1.0],  # Frazione di campioni usati per albero
-                'colsample_bytree': [0.8, 1.0]  # Frazione di feature usate per albero
-            }
-        else:  # lr
-            # --- 1. SCALING DEI DATI (Necessario per LR) ---
-            print("Applicazione dello StandardScaler...")
-            # Crea lo scaler
-            scaler = StandardScaler()
-            # Adattalo SOLO su X_train
-            scaler.fit(X_train)
-            # Trasforma sia X_train che X_val
-            X_train = scaler.transform(X_train)
-            X_val = scaler.transform(X_val)
-            X_test = scaler.transform(X_test)
-
-            param_grid = {
-                'C': [0.01, 0.1, 0.5, 1.0, 1.5, 2.0],
-                'penalty': ['l1', 'l2'],
-                'solver': ['liblinear', 'saga']
-            }
-
-        cv_splitter = StratifiedKFold(n_splits=10, shuffle=True, random_state=RANDOM_SEED)
-
-        grid_search = GridSearchCV(
-            estimator = model,
-            param_grid = param_grid,
-            cv = cv_splitter,
-            scoring = 'accuracy',
-            n_jobs = -1,
-            verbose = 0
-        )
-
-        grid_search.fit(X_train, y_train)
-
-        print("Training model complete")
-        print(f"Migliori parametri trovati: {grid_search.best_params_}")
-        # print(f"Miglior score (accuracy) dalla cross-validation: {grid_search.best_score_:.4f}")
-        model = grid_search.best_estimator_
-        
-        best_idx = grid_search.best_index_
-        mean_best = grid_search.cv_results_['mean_test_score'][best_idx]
-        std_best  = grid_search.cv_results_['std_test_score'][best_idx]
-        print(f"Best params mean CV: {mean_best:.4f} ± {std_best:.4f}")
-    else:
-        model.fit(X_train, y_train)
-        print("Training model complete")
+    model = train(X_train, y_train, X_val, y_val, X_test)
 
     # Get model predictions (as class labels 0/1)
     y_pred = model.predict(X_val)
