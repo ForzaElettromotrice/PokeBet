@@ -119,36 +119,93 @@ P_DEF_TYPE= {
         ]
 }
 
-def count_fnt(data: dict) -> Tuple[int, int]:
-    out1 = 0
-    out2 = 0
-    for turn in data["battle_timeline"]:
-        if turn["p1_pokemon_state"]["status"] == "fnt":
-            out1 += 1
-        if turn["p2_pokemon_state"]["status"] == "fnt":
-            out2 += 1
-    return out1, out2
-def count_status_alter(data: dict) -> Tuple[int, int]:
-    p1_pokemons = { }
-    p2_pokemons = { }
-
+def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, dict, int, int]:
+    """
+    Simulate the battle to get the final team states and number of fainted pokemons
+    
+    Args:
+        data (dict): The battle data.
+        p1_team (dict): The initial team of player 1.
+        p2_team (dict): The initial team of player 2.
+        
+    Returns:
+        p1_team (dict): The final team of player 1.
+        p2_team (dict): The final team of player 2.
+        p1_fnt (int): The number of fainted pokemons of player 1.
+        p2_fnt (int): The number of fainted pokemons of player 2
+    """
+    p1_fainted = 0
+    p2_fainted = 0
     for turn in data["battle_timeline"]:
         p1_name = turn["p1_pokemon_state"]["name"]
         p2_name = turn["p2_pokemon_state"]["name"]
+        
+        if p2_name not in p2_team:
+            p2_team[p2_name] = turn["p2_pokemon_state"]
 
-        p1_pokemons[p1_name] = turn["p1_pokemon_state"]["status"]
-        p2_pokemons[p2_name] = turn["p2_pokemon_state"]["status"]
+        # Save the updated state of the pokemon with the keys hp_pct, status, effects, boosts
+        for key in turn["p1_pokemon_state"].keys():
+            if key == "name":
+                continue
+            p1_team[p1_name][key] = turn["p1_pokemon_state"][key]
+            p2_team[p2_name][key] = turn["p2_pokemon_state"][key]
+        
+        # Remove the fainted pokemons from the team and increment fainted counter
+        if p1_team[p1_name]['status']  == "fnt":
+            del p1_team[p1_name]
+            p1_fainted += 1
+        if p2_team[p2_name]['status']  == "fnt":
+            del p2_team[p2_name]
+            p2_fainted += 1
 
+    return p1_team, p2_team, p1_fainted, p2_fainted
+
+def count_status_alter(p1_team: dict, p2_team: dict) -> Tuple[int, int]:
+    """
+    Count the number of pokemons with status alterations (not fainted or no status) for each team.
+    
+    Args:
+        p1_team (dict): The team of player 1.
+        p2_team (dict): The team of player 2.
+    
+    Returns:
+        p1_statuses (int): The number of pokemons with status alterations in player 1's team.
+        p2_statuses (int): The number of pokemons with status alterations in player 2's team."""
     p1_statuses = 0
     p2_statuses = 0
-    for p in p1_pokemons.values():
-        if p not in ["fnt", "nostatus"]:
+    
+    for pokemom in p1_team.values():
+        # if the status is not known, assume no status alteration
+        if pokemom.get("status", "nostatus") not in ["fnt", "nostatus"]:
             p1_statuses += 1
-    for p in p2_pokemons.values():
-        if p not in ["fnt", "nostatus"]:
+    for pokemom in p2_team.values():
+        if pokemom.get("status", "nostatus") not in ["fnt", "nostatus"]:
             p2_statuses += 1
-
     return p1_statuses, p2_statuses
+
+def count_boosts(p1_team: dict, p2_team: dict) -> Tuple[int, int]:
+    """
+    Count the total number of boosts for each team.
+    
+    Args:
+        p1_team (dict): The team of player
+        p2_team (dict): The team of player 2.
+        
+    Returns:
+        p1_boosts (int): The total number of boosts in player 1's team.
+        p2_boosts (int): The total number of boosts in player 2's team."""
+    p1_boosts = 0
+    p2_boosts = 0
+    
+    for p in p1_team.values():
+        for boost in p.get('boosts', {}).values():
+            p1_boosts += boost
+
+    for p in p2_team.values():
+        for boost in p.get('boosts', {}).values():
+            p2_boosts += boost
+
+    return p1_boosts, p2_boosts
 
 def calculate_mean_hp(p1_team: dict, p2_team: dict):
     p1_mean = 0
@@ -262,35 +319,7 @@ def find_moves(data: dict):
     
     return np.mean(p1_attacks_power), np.mean(p2_attacks_power), max(p1_attacks_power) if p1_attacks_power != [] else None, max(p2_attacks_power) if p2_attacks_power != [] else None, num_priority_moves_p1, num_priority_moves_p2
 
-def team_after_battle(data: dict, p1_team: dict, p2_team: dict) -> Tuple[dict, dict, int, int]:
-    p1_fainted = 0
-    p2_fainted = 0
-    for turn in data["battle_timeline"]:
-        p1_name = turn["p1_pokemon_state"]["name"]
-        p2_name = turn["p2_pokemon_state"]["name"]
-        
-        if p2_name not in p2_team:
-            p2_team[p2_name] = turn["p2_pokemon_state"]
-
-        p1_team[p1_name]['hp_pct'] = turn["p1_pokemon_state"]["hp_pct"]
-        p2_team[p2_name]['hp_pct'] = turn["p2_pokemon_state"]["hp_pct"]
-        p1_team[p1_name]['status'] = turn["p1_pokemon_state"]["status"]
-        p2_team[p2_name]['status'] = turn["p2_pokemon_state"]["status"]
-        p1_team[p1_name]['effects'] = turn["p1_pokemon_state"]["effects"]
-        p2_team[p2_name]['effects'] = turn["p2_pokemon_state"]["effects"]
-        p1_team[p1_name]['boosts'] = turn["p1_pokemon_state"]["boosts"]
-        p2_team[p2_name]['boosts'] = turn["p2_pokemon_state"]["boosts"]
-
-        if p1_team[p1_name]['status']  == "fnt":
-            del p1_team[p1_name]
-            p1_fainted += 1
-        if p2_team[p2_name]['status']  == "fnt":
-            del p2_team[p2_name]
-            p2_fainted += 1
-
-    return p1_team, p2_team, p1_fainted, p2_fainted
-
-def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
+def type_multiplier(p1_moves: dict, p2_moves: dict) -> Tuple[float, float]:
 
     type_pokemon1 = {}
     type_pokemon2 = {}
@@ -372,8 +401,8 @@ def type_multiplier(p1_moves: dict, p2_moves: dict) -> (float, float):
 
         diz_multiplier_other_pokemon[pokemon2] = np.mean(total_effectiveness)
 
-    p1_team_avg = np.sum(list(diz_multiplier_my_pokemon.values()))
-    p2_team_avg = np.sum(list(diz_multiplier_other_pokemon.values()))
+    p1_team_avg = np.mean(list(diz_multiplier_my_pokemon.values()))
+    p2_team_avg = np.mean(list(diz_multiplier_other_pokemon.values()))
 
     return p1_team_avg, p2_team_avg
 
@@ -385,59 +414,50 @@ def create_features(data: list[dict]) -> pd.DataFrame:
     for battle in tqdm(data, desc = "Extracting features"):
         features = { }
 
-        # --- Player 1 Team Features ---
-        # p1_team = battle.get('p1_team_details', [])
-        # if p1_team:
-        #     features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
-        #     features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
-        #     features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
-        #     features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
-        #     features["p1_mean_spa"] = np.mean([p.get("base_spa", 0) for p in p1_team])
-        #     features["p1_mean_spd"] = np.mean([p.get("base_spd", 0) for p in p1_team])
+        # Get player 1 initial team
         p1_team = {}
         for p in battle.get('p1_team_details', []):
             p1_team[p['name']] = p
         
-        # for i, p in enumerate(p1_team.values()):
-        #     features[f'p1_p{i}_base_hp'] = p.get('base_hp', 0)
-        #     features[f'p1_p{i}_base_spe'] = p.get('base_spe', 0)
-        #     features[f'p1_p{i}_base_atk'] = p.get('base_atk', 0)
-        #     features[f'p1_p{i}_base_def'] = p.get('base_def', 0)
-        #     features[f'p1_p{i}_base_spa'] = p.get("base_spa", 0)
-        #     features[f'p1_p{i}_base_spd'] = p.get("base_spd", 0)
-        #     features[f'p1_p{i}_level'] = p.get("level", 0)
-        
+        # Get player 2 starting pokemon
         p2_team = {}
         p2_lead = battle.get('p2_lead_details', {})
         p2_team[p2_lead.get('name', '')] = p2_lead
         
-        # features['p2_lead_base_hp'] = p2_lead.get('base_hp', 0)
-        # features['p2_lead_base_spe'] = p2_lead.get('base_spe', 0)
-        # features['p2_lead_base_atk'] = p2_lead.get('base_atk', 0)
-        # features['p2_lead_base_def'] = p2_lead.get('base_def', 0)
-        # features['p2_lead_base_spa'] = p2_lead.get("base_spa", 0)
-        # features['p2_lead_base_spd'] = p2_lead.get("base_spd", 0)
-        # features['p2_lead_level'] = p2_lead.get("level", 0)
-        
+        # Simulate the battle to get the final team states and number of fainted pokemons
         p1_team, p2_team, p1_fnt, p2_fnt = team_after_battle(battle, p1_team, p2_team)
         
+        # Feature for the size of the teams
         features['p1_team_size'] = len(p1_team)
         features['p2_team_size'] = len(p2_team)
 
-        # p1_fnt, p2_fnt = count_fnt(battle)
+        # Feature for the number of fainted pokemons
         features['p1_fnt'] = p1_fnt
         features['p2_fnt'] = p2_fnt
         features["p1_p2_diff_fnt"] = p1_fnt - p2_fnt
 
-        p1_status_alter, p2_status_alter = count_status_alter(battle)
+        # Feature for the number of status alterations of the remaining pokemons
+        p1_status_alter, p2_status_alter = count_status_alter(p1_team, p2_team)
         features["p1_status_alter"] = p1_status_alter
         features["p2_status_alter"] = p2_status_alter
         #features["p1_p2_diff_status_alter"] = p1_status_alter - p2_status_alter
+        
+        # Features for the total number of boosts of the remaining pokemons
+        p1_boosts, p2_boosts = count_boosts(p1_team, p2_team)
+        features['p1_total_boosts'] = p1_boosts
+        features['p2_total_boosts'] = p2_boosts
+        # features['p1_p2_diff_boosts'] = p1_boosts - p2_boosts
 
+        # Feature for the mean hp percentage of the remaining pokemons
         p1_hps, p2_hps = calculate_mean_hp(p1_team, p2_team)
         features['p1_mean_hp_pct'] = p1_hps
         features['p2_mean_hp_pct'] = p2_hps
 
+        p1_moves, p2_moves = extract_moves(battle)
+        p1_team_avg, p2_team_avg = type_multiplier(p1_moves, p2_moves)
+        features['p1_avg'] = p1_team_avg
+        features['p2_avg'] = p2_team_avg
+        
         p1_mean_atk, p2_mean_atk, p1_max_atk, p2_max_atk, p1_num_priority, p2_num_priority = find_moves(battle)
         features['p1_mean_atk'] = p1_mean_atk
         features['p2_mean_atk'] = p2_mean_atk
@@ -452,18 +472,6 @@ def create_features(data: list[dict]) -> pd.DataFrame:
 
         #features['p2_type_adv'] = p2_adv
         #features['p2_type_res'] = p2_res
-        
-        p1_boosts = 0
-        for p in p1_team.values():
-            for boost in p.get('boosts', {}).values():
-                p1_boosts += boost
-        features['p1_total_boosts'] = p1_boosts
-        p2_boosts = 0
-        for p in p2_team.values():
-            for boost in p.get('boosts', {}).values():
-                p2_boosts += boost
-        features['p2_total_boosts'] = p2_boosts
-        # features['p1_p2_diff_boosts'] = p1_boosts - p2_boosts
 
         features['battle_id'] = battle.get('battle_id')
         if 'player_won' in battle:
@@ -471,10 +479,7 @@ def create_features(data: list[dict]) -> pd.DataFrame:
 
         #feature_list.append(features)
 
-        p1_moves, p2_moves = extract_moves(battle)
-        p1_team_avg, p2_team_avg = type_multiplier(p1_moves, p2_moves)
-        features['p1_avg'] = p1_team_avg
-        features['p2_avg'] = p2_team_avg
+
         feature_list.append(features)
 
     return pd.DataFrame(feature_list).fillna(0)

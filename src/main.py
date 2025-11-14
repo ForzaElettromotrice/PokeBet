@@ -3,7 +3,7 @@ import json
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
 from model import get_model
@@ -110,10 +110,12 @@ def main():
                 'solver': ['liblinear', 'saga']
             }
 
+        cv_splitter = StratifiedKFold(n_splits=10, shuffle=True, random_state=RANDOM_SEED)
+
         grid_search = GridSearchCV(
             estimator = model,
             param_grid = param_grid,
-            cv = 5,
+            cv = cv_splitter,
             scoring = 'accuracy',
             n_jobs = -1,
             verbose = 0
@@ -123,8 +125,13 @@ def main():
 
         print("Training model complete")
         print(f"Migliori parametri trovati: {grid_search.best_params_}")
-        print(f"Miglior score (accuracy) dalla cross-validation: {grid_search.best_score_:.4f}")
+        # print(f"Miglior score (accuracy) dalla cross-validation: {grid_search.best_score_:.4f}")
         model = grid_search.best_estimator_
+        
+        best_idx = grid_search.best_index_
+        mean_best = grid_search.cv_results_['mean_test_score'][best_idx]
+        std_best  = grid_search.cv_results_['std_test_score'][best_idx]
+        print(f"Best params mean CV: {mean_best:.4f} ± {std_best:.4f}")
     else:
         model.fit(X_train, y_train)
         print("Training model complete")

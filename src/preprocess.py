@@ -76,14 +76,14 @@ def find_alive_pokemon(data: dict, pokemon_details: dict):
         pokemon_details["p1"][name]["attack_type_score"] = 0
         pokemon_details["p1"][name]["defense_type_score"] = 0
         pokemon_details["p1"][name]["moves"] = []
-        pokemon_details["p1"][name]["state"] = {'status': []}
+        pokemon_details["p1"][name]["state"] = {'status': ['nostatus']}
     
     p2_lead = data["p2_lead_details"]
     pokemon_details["p2"][p2_lead["name"]] = p2_lead
     pokemon_details["p2"][p2_lead["name"]]["attack_type_score"] = 0
     pokemon_details["p2"][p2_lead["name"]]["defense_type_score"] = 0
     pokemon_details["p2"][p2_lead["name"]]["moves"] = []
-    pokemon_details["p2"][p2_lead["name"]]["state"] = {'status': []}
+    pokemon_details["p2"][p2_lead["name"]]["state"] = {'status': ['nostatus']}
     
     for turn in data["battle_timeline"]:
         p1_name = turn["p1_pokemon_state"]["name"]
