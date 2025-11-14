@@ -10,6 +10,9 @@ from model import get_model
 from preprocess2 import create_features
 from settings import *
 
+TRAIN_FILE_PATH = "data/train.jsonl"
+TEST_FILE_PATH = "data/test.jsonl"
+
 def load_data(path: str):
     data = []
     # Read the file line by line
@@ -36,10 +39,7 @@ def prepare_submission(predictions: np.ndarray, test_df: pd.DataFrame) -> None:
 
     print("\n'submission.csv' file created successfully!")
 
-def main():
-    train_file_path = "data/train.jsonl"
-    test_file_path = "data/test.jsonl"
-
+def main(train_file_path: str, test_file_path: str) -> None:
     # Load data
     train_data = load_data(train_file_path)
     test_data = load_data(test_file_path)
@@ -148,4 +148,4 @@ def main():
     prepare_submission(test_predictions, test_df)
 
 if __name__ == '__main__':
-    main()
+    main(TRAIN_FILE_PATH, TEST_FILE_PATH)

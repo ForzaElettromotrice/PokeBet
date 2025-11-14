@@ -7,7 +7,7 @@ def create_logistic_regression(
         penalty: str = "l2",
         C: float = 1.0,
         solver: str = "lbfgs",
-        max_iter: int = 7000,
+        max_iter: int = 3000,
         multi_class: str = "auto",
         verbose: int = 0,
         class_weight: dict | None = None,
